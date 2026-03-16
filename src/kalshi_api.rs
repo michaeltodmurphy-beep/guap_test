@@ -223,7 +223,7 @@ impl KalshiApiClient {
         let resp: MarketsResponse = self
             .get(
                 "/trade-api/v2/markets",
-                &[("series_ticker", series_ticker), ("limit", "50"), ("status", "open")],
+                &[("series_ticker", series_ticker), ("limit", "50")],
             )
             .await?;
         Ok(resp.markets)
