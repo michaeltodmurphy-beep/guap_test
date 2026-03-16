@@ -1,0 +1,6 @@
+/target
+config.json
+history.toml
+*.pem
+*.key
+.env
