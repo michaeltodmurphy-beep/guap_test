@@ -19,13 +19,14 @@ The bot monitors Kalshi's short-duration (e.g. 15-minute, hourly) BTC and ETH cr
    - At least `min_elapsed_minutes` (default 5 min) have passed since the market opened (**late window**).
    - At least `min_time_remaining_seconds` (default 30 s) remain before market close.
    - No existing open position in this market.
+   - *(Optional)* **Momentum confirmation** — when `momentum_enabled: true` (default), the current bid must be at or above the sliding-window average bid over the prior `momentum_window_seconds`.
    - *(Optional)* **Early window** — when `early_window_enabled: true`, the bot can also buy during the first few minutes of a market's life (see [Early Window](#early-window) below).
 
 3. **Buy Execution** — Places a limit buy order for Yes contracts at the current best ask price, for a fixed USD amount (default $1.00). All prices use Kalshi's integer cent format (1–99).
 
 4. **Exit Conditions**:
    - **Profit target** — Sells when the bid reaches `sell_price` (default 99¢).
-   - **Tiered stop-loss** — Sells portions of the position at configurable price tiers (SL1–SL2 by default). Tiers with `triggers_multiplier: true` (SL2 by default) allow re-entry in the same market period.
+   - **Stop-loss** — Sells the entire position when the bid drops to or below `stop_loss_price` (default 50¢). Uses a market order by default (`stop_loss_use_market_order: true`).
    - **Market settlement** — Kalshi settles contracts automatically; the bot just logs the result.
 
 ---
@@ -67,23 +68,27 @@ On first run the bot creates a default `config.json` pointing at the **demo** AP
     "trigger_price": 87,
     "min_elapsed_minutes": 5,
     "sell_price": 99,
+    "late_window_sell_enabled": false,
     "max_buy_price": 95,
-    "stop_loss_tiers": [
-      { "name": "SL1", "price": 65, "sell_percent": 80, "triggers_multiplier": false },
-      { "name": "SL2", "price": 55, "sell_percent": 20, "triggers_multiplier": true }
-    ],
-    "stop_loss_cooldown_seconds": 3,
-    "stop_loss_require_confirmation": true,
-    "stop_loss_min_remaining_seconds": 60,
     "min_time_remaining_seconds": 30,
     "market_series_tickers": ["KXBTC", "KXETH"],
     "enable_btc": true,
     "enable_eth": true,
+    "max_concurrent_positions": 1,
+    "use_websocket": true,
+    "stop_loss_price": 50,
+    "stop_loss_min_remaining_seconds": 60,
+    "stop_loss_use_market_order": true,
+    "momentum_enabled": true,
+    "momentum_window_seconds": 10,
+    "momentum_min_trend": 0,
     "early_window_enabled": false,
     "early_window_start_minutes": 1.0,
     "early_window_end_minutes": 5.0,
     "early_window_trigger_price": 88,
-    "early_window_max_buy_price": 92
+    "early_window_max_buy_price": 92,
+    "early_window_sell_price": 99,
+    "early_window_sell_enabled": true
   }
 }
 ```
@@ -97,32 +102,30 @@ On first run the bot creates a default `config.json` pointing at the **demo** AP
 | `private_key_path` | Path to your RSA private key PEM file (PKCS#8 format) |
 | `check_interval_ms` | How often to check for opportunities (milliseconds) |
 | `fixed_trade_amount` | USD amount per trade (e.g. `1.0` = $1.00) |
-| `trigger_price` | Minimum Yes bid price to enter (cents, 1–99) |
-| `max_buy_price` | Maximum Yes bid price to enter (cents, 1–99) |
-| `sell_price` | Target sell price (cents, 1–99) |
-| `stop_loss_tiers` | Array of stop-loss tiers (see below). Sell percentages must sum to 100. |
-| `stop_loss_cooldown_seconds` | Seconds to wait after SL trigger before selling (default `3`). Allows order book to fill for better fills. Set to `0` for immediate sells. |
-| `stop_loss_require_confirmation` | If `true`, price must still be at/below SL tier after cooldown to sell. Protects against false triggers (default `true`). |
-| `stop_loss_min_remaining_seconds` | Minimum seconds remaining before close for SL sells (default `60`). Below this threshold, stop-losses are skipped and positions are held until settlement. Prevents selling into thin liquidity near market close. |
+| `trigger_price` | Minimum Yes bid price to enter in the late window (cents, 1–99) |
+| `max_buy_price` | Maximum Yes ask price to enter (cents, 1–99) |
+| `sell_price` | Profit-target sell price for late-window trades (cents, 1–99) |
+| `late_window_sell_enabled` | When `true`, late-window positions are sold at `sell_price`. When `false`, they are held until settlement (default `false`) |
 | `min_elapsed_minutes` | Minimum market age before **late window** entry (minutes) |
 | `min_time_remaining_seconds` | Minimum time remaining before close (seconds) |
 | `market_series_tickers` | Kalshi event series to monitor (e.g. `["KXBTC", "KXETH"]`) |
 | `enable_btc` | Whether to trade BTC markets |
 | `enable_eth` | Whether to trade ETH markets |
+| `max_concurrent_positions` | Maximum number of open positions per asset type (default `1`) |
+| `use_websocket` | Use WebSocket for real-time price data instead of REST polling (default `true`) |
+| `stop_loss_price` | Bid price at which the entire position is sold immediately (cents, 1–99; default `50`) |
+| `stop_loss_min_remaining_seconds` | Minimum seconds before close for stop-loss to fire. Below this threshold, SL is skipped (default `60`) |
+| `stop_loss_use_market_order` | Use market orders for stop-loss sells to guarantee execution (default `true`) |
+| `momentum_enabled` | Require bid to be at or above the sliding-window average before entry (default `true`) |
+| `momentum_window_seconds` | Width of the sliding window for momentum confirmation (default `10`) |
+| `momentum_min_trend` | Minimum required bid increase over the window, in cents (default `0`) |
 | `early_window_enabled` | Enable early window buying (default `false`; see [Early Window](#early-window)) |
 | `early_window_start_minutes` | Minutes elapsed before early window opens (default `1.0`) |
 | `early_window_end_minutes` | Minutes elapsed when early window closes (default `5.0`; must be ≤ `min_elapsed_minutes`) |
 | `early_window_trigger_price` | Minimum bid for early window entry (cents, 1–99; default `88`) |
-| `early_window_max_buy_price` | Maximum bid/ask for early window entry (cents, 1–99; default `92`) |
-
-#### Stop-loss tier fields
-
-| Field | Description |
-|---|---|
-| `name` | Tier identifier (e.g. `"SL1"`) |
-| `price` | Bid price in cents at which this tier triggers |
-| `sell_percent` | Percentage of the **original** contract count to sell at this tier |
-| `triggers_multiplier` | If `true`, hitting this tier enables the stop-loss multiplier on re-entry |
+| `early_window_max_buy_price` | Maximum ask for early window entry (cents, 1–99; default `92`) |
+| `early_window_sell_price` | Profit-target sell price for early-window trades (cents, default `99`) |
+| `early_window_sell_enabled` | When `true`, early-window positions are sold at `early_window_sell_price` (default `true`) |
 
 > **All price values are in cents (integers).** Kalshi contracts trade on a 1–99 cent scale where 99¢ ≈ near-certain Yes.
 
@@ -143,13 +146,6 @@ When `early_window_enabled: true`, the bot adds a second entry path for the firs
 
 > `early_window_end_minutes` must be ≤ `min_elapsed_minutes` so the windows never overlap.
 
-### Blocking logic
-
-After an early window buy, the ticker is **blocked from late window entry** to prevent double-buying the same market. The block is lifted in one case:
-
-- If the position closes via stop-loss **and** no multiplier-triggering tier (SL2) fired → the ticker is unblocked for late window entry.
-- If SL2 fires → the ticker stays blocked, and normal stopped-out re-entry logic (using `trigger_price_2`) applies.
-
 ### Example config
 
 ```json
@@ -157,8 +153,16 @@ After an early window buy, the ticker is **blocked from late window entry** to p
 "early_window_start_minutes": 1.0,
 "early_window_end_minutes": 5.0,
 "early_window_trigger_price": 88,
-"early_window_max_buy_price": 92
+"early_window_max_buy_price": 92,
+"early_window_sell_price": 99,
+"early_window_sell_enabled": true
 ```
+
+---
+
+## No-Trade Schedule
+
+The bot supports a configurable no-trade schedule to avoid trading during high-volatility periods (e.g. market open). The default schedule blocks trading on weekdays from 09:30–10:30 ET.
 
 ---
 
