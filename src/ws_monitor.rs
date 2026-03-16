@@ -42,8 +42,9 @@ impl WsMarketMonitor {
         let api = self.api.clone();
         let config = self.config.clone();
         let snapshots = Arc::clone(&self.snapshots);
+        let ws_base_url = config.kalshi.ws_base_url.clone();
         tokio::spawn(async move {
-            run_ws_loop(api, config, snapshots).await;
+            run_ws_loop(api, config, snapshots, ws_base_url).await;
         });
     }
 
@@ -80,8 +81,9 @@ async fn run_ws_loop(
     api: KalshiApiClient,
     config: Config,
     snapshots: Arc<RwLock<HashMap<String, MarketSnapshot>>>,
+    ws_base_url: Option<String>,
 ) {
-    let ws_url = match build_ws_url(api.base_url()) {
+    let ws_url = match build_ws_url(api.base_url(), ws_base_url.as_deref()) {
         Ok(u) => u,
         Err(e) => {
             log::error!("WsMonitor: failed to build WebSocket URL: {e}");
@@ -271,12 +273,18 @@ async fn run_ws_loop(
 // Helpers
 // ---------------------------------------------------------------------------
 
-/// Derive the WebSocket URL from the REST base URL.
-fn build_ws_url(base_url: &str) -> Result<String> {
-    let parsed = Url::parse(base_url)?;
+/// Derive the WebSocket URL from the REST base URL, or use an explicit ws_base_url if provided.
+/// If `explicit_base` is given, the URL is `{explicit_base}/trade-api/ws/v2`.
+/// Otherwise the scheme+host are extracted from `rest_base_url`.
+pub fn build_ws_url(rest_base_url: &str, explicit_base: Option<&str>) -> Result<String> {
+    if let Some(base) = explicit_base {
+        let trimmed = base.trim_end_matches('/');
+        return Ok(format!("{trimmed}/trade-api/ws/v2"));
+    }
+    let parsed = Url::parse(rest_base_url)?;
     let host = parsed
         .host_str()
-        .ok_or_else(|| anyhow::anyhow!("No host in base_url '{base_url}'"))?;
+        .ok_or_else(|| anyhow::anyhow!("No host in base_url '{rest_base_url}'"))?;
     Ok(format!("wss://{host}/trade-api/ws/v2"))
 }
 
