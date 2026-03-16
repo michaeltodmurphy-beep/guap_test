@@ -1,0 +1,31 @@
+[package]
+name = "guap-test"
+version = "0.1.0"
+edition = "2021"
+description = "Momentum-based crypto trading bot for Kalshi prediction markets"
+
+[[bin]]
+name = "kalshi-bot"
+path = "src/main.rs"
+
+[dependencies]
+tokio = { version = "1", features = ["full"] }
+reqwest = { version = "0.12", features = ["json", "rustls-tls"], default-features = false }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+anyhow = "1"
+clap = { version = "4", features = ["derive"] }
+log = "0.4"
+env_logger = "0.11"
+chrono = { version = "0.4", features = ["serde"] }
+chrono-tz = "0.10"
+rust_decimal = { version = "1", features = ["serde-with-str"] }
+rsa = { version = "0.9", features = ["pem"] }
+sha2 = "0.10"
+base64 = "0.22"
+rand = "0.8"
+uuid = { version = "1", features = ["v4"] }
+futures = "0.3"
+tokio-tungstenite = { version = "0.28", features = ["rustls-tls-native-roots"] }
+futures-util = "0.3"
+url = "2"
