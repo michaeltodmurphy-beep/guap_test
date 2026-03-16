@@ -27,6 +27,11 @@ pub struct CliArgs {
     /// Path to the JSON configuration file.
     #[arg(long, default_value = "config.json")]
     pub config: String,
+
+    /// Run a one-shot API diagnostic: print exchange status and list markets for each
+    /// configured series, then exit without entering the main trading loop.
+    #[arg(long)]
+    pub diagnose: bool,
 }
 
 // ---------------------------------------------------------------------------
@@ -170,6 +175,11 @@ pub struct KalshiConfig {
     /// Demo: "https://demo-api.kalshi.co"
     /// Production: "https://api.elections.kalshi.com"
     pub api_base_url: String,
+
+    /// WebSocket base URL. If not set, derived from api_base_url.
+    /// Demo: "wss://demo-api.kalshi.co"
+    #[serde(default)]
+    pub ws_base_url: Option<String>,
 
     /// Your Kalshi API key ID (from the Kalshi dashboard).
     pub api_key_id: Option<String>,
@@ -369,6 +379,7 @@ impl Default for Config {
         Config {
             kalshi: KalshiConfig {
                 api_base_url: "https://demo-api.kalshi.co".to_string(),
+                ws_base_url: Some("wss://demo-api.kalshi.co".to_string()),
                 api_key_id: None,
                 private_key_path: None,
             },
